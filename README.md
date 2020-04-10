@@ -17,7 +17,7 @@ NOTE that handling OS signals and polling the directory that is being watched ar
 Usage:
 The user can call this program from the command line with several parameters: -e, --ext: extension of text files to watch. eg. .txt, .log -i, --int: time interval between each scan in seconds dir: directory to monitor magic: word for which to search in each text file
 
-eg. python2 dirwatcher.py --ext .log --int 2 logdirectory testphrase
+eg. python dirwatcher.py --ext .log --int 2 logdirectory testphrase
 
 Success Criteria
 Use all best-practices that have been taught so far: docstrings, PEP8, unit tests, clean and readable code and meaningful commit messages.
