@@ -1,64 +1,103 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-'__author__' == 'Sean Bailey'
-
-import os
-import argparse
-import time
-import datetime
-import logging
-import logging.handlers
 import signal
+import logging
+import datetime
+import time
+import argparse
+import os
+import sys
+'__author__' == 'Sean Bailey, Koren, Chris, Stew, Piero, MikeA'
+'   and mobcoding walkthrough'
 
-# exit_flag - False
-logger = logging.getLogger(__file__)
+# import logging.handlers
+
+exit_flag = False
+logger = logging.getLogger(__name__)
+files_found = []
+magic_word_position = {}
 
 
-def watch_directory(args):
-    watching_files = {}
-    logger.info('Watching directory: {}, File Extension: {}, Polling Interval: {}, Magic Text: {}'.format(
-        args.path, args.extension, args.interval, args.magic
-    ))
+def watch_directory(magic_word, extension, polling, dir_path):
+    # watch directory for file changes
 
-    # Keys are the actual filename and values are where to begin searching
-    # Look at directory and get list of files from it.
-    # Put files into watching files dictionary IF they're not already in it.
-    # Log it as a new file.
-    # Look through watching_files dictionary and compare to list of files that is in directory.
-    # IF file is not in dictionary anymore, you have to log the file and remove it from dictionary.
-    # Iterate through dictionary, open each file at last line you read from.
-    # Start reading from that point looking for any "magic" text.
-    # Update the last position you read from in dictionary.
-    # Add gitignore for log files, vs code files
-    # Will want to add a ReadMe
-
-    while True:
-        try:
-            logger.info('Inside Watch Loop')
-            time.sleep(args.interval)
-        except KeyboardInterrupt:
-            break
+    file_dictionary = {}
+    while not exit_flag:
+        logger.debug("Still watching")
+        # Add files
+        for filename in os.listdir(dir_path):
+            if filename.endswith(extension) and filename\
+                    not in file_dictionary:
+                logger.info(f"{filename} added")
+                file_dictionary[filename] = 0
+        # Remove files
+        for filename in list(file_dictionary):
+            if filename not in os.listdir(dir_path):
+                file_dictionary.pop(filename)
+                logger.info(f"{filename} removed")
+        # Scan rest of files
+        for filename in file_dictionary:
+            broad_path = os.path.join(dir_path, filename)
+            file_dictionary[filename] = find_magic(
+                broad_path, magic_word, file_dictionary[filename]
+            )
+        time.sleep(polling)
 
 
 def find_magic(filename, starting_line, magic_word):
-    pass
+    """ Look for magic word in filename searching line by line.
+     Keep record of most recent line searched"""
+    with open(filename, "r") as f:
+        search_index = 0
+        for search_index, line in enumerate(f):
+            if search_index >= starting_line:
+                if magic_word in line:
+                    logger.info(f"Magic word is {magic_word} in {filename} "
+                                f"on line {search_index + 1}"
+                                )
+        return search_index + 1
+
+
+def signal_handler(sig_num, frame):
+    """ Toogles exit_flag when finds SIGINT and SIGTERM signals"""
+    global exit_flag
+    # log signal name both python 2 and python 3 ways
+    signames = dict((k, v) for v, k in reversed(sorted(
+        signal.__dict__.items()))
+        if v.startswith('SIG') and not v.startswith('SIG_'))
+    logger.warning('Received sig: ' + signames[sig_num])
+    if sig_num == signal.SIGINT or signal.SIGTERM:
+        global exit_flag
+        exit_flag = True
 
 
 def create_parser():
+    """ Creates parser. Sets up command line arguments"""
     parser = argparse.ArgumentParser()
-    parser.add_argument('-e', '--ext', type=str, default='.txt',
-                        help='Text file extension to watch')
-    parser.add_argument('-i', '--interval', type=float,
-                        default=1.0, help='Number of seconds between polling')
-    parser.add_argument('path', help='Directory path to watch')
-    parser.add_argument('magic', help='String to watch for')
+    parser.add_argument(
+        '-e', '--ext',
+        type=str,
+        default='.txt',
+        help='Text file extension to watch')
+    parser.add_argument(
+        '-i', '--interval',
+        type=float,
+        default=1,
+        help='Number of seconds between polling')
+    parser.add_argument(
+        'path',
+        help='Directory path to watch')
+    parser.add_argument(
+        'magic',
+        help='String to watch for')
     return parser
 
 
-def main():
+def main(args):
     logging.basicConfig(
-        format='%(asctime)s.%(msecs)03d %(name)-12s %(levelname)-8s [%(threadName)-12s] %(message)s',
+        format='%(asctime)s.%(msecs)03d %(name)-12s %(levelname)-8s '
+        '[%(threadName)-12s] %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
     logger.setLevel(logging.DEBUG)
@@ -73,7 +112,27 @@ def main():
     )
     parser = create_parser()
     args = parser.parse_args()
-    watch_directory(args)
+
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
+    logger.info(
+        f"Searching in {args.path} for {args.ext}"
+        f" files with {args.magic}"
+    )
+
+    while not exit_flag:
+        try:
+            watch_directory(args.ext, args.interval, args.path, args.magic)
+        except FileNotFoundError:
+            logger.error(args.path + " directory does not exist")
+        except Exception:
+            logger.exception("Unhandled exception")
+        finally:
+            logger.info("Program Interrupted")
+        time.sleep(3.0)
+
+    # watch_directory(args)
     # watch_directory()
     uptime = datetime.datetime.now()-app_start_time
     logger.info(
@@ -88,4 +147,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    main(sys.argv[1:])
